@@ -110,6 +110,11 @@
   src: url('./res/fonts/BentonSansF-ExtraLight.otf') format("opentype");
 }
 
+
+h3 {
+  font-family: 'BentonSansF'
+}
+
 .App {
   text-align: center;
 }
@@ -133,8 +138,55 @@
   color: #61dafb;
 }
 
-h3 {
-  font-family: 'BentonSansF'
+#mainVideoContainer .Typewriter {
+  position: absolute;
+  bottom: 140px;
+  width: 100%;
+}
+#mainVideoContainer .Typewriter, #mainVideoContainer h3 {
+  font-family: Quarto;
+  font-size: 90px;
+  font-weight: 700;
+  color: #00F300;
+}
+
+.frogLogo {
+  width: 150px;
+  height: 150px;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.frogCrossout {
+  width: calc(640px - 50px);
+  left: 50%;
+  position: absolute;
+  height: 2px;
+  top: calc(150px / 2);
+  background-color: #00F300;
+  transform: translateX(-50%);
+}
+
+.frogCrossoutL {
+  width: calc((640px / 2) - 100px);
+  left: 50%;
+  position: absolute;
+  height: 2px;
+  bottom: calc(150px / 2);
+  background-color: #00F300;
+  transform: translateX(-130%);
+}
+
+.frogCrossoutR {
+  width: calc((640px / 2) - 100px);
+  left: 50%;
+  position: absolute;
+  height: 2px;
+  bottom: calc(150px / 2);
+  background-color: #00F300;
+  transform: translateX(calc(130% - (640px / 2 - 100px)));
 }
 
 @keyframes App-logo-spin {
