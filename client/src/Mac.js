@@ -1,17 +1,14 @@
 import React, { Component } from 'react';
-import frog from './res/sxsw_eye_base.png';
-import frogEye from './res/sxsw_eye_center.png';
 import warp from './res/warp.mp4';
 import pixel from './res/pixel_frog.jpg';
-import head from './res/head.obj';
+import mulFrogs from './res/pixel_frogs.jpg';
+import celeb from './res/pixel_50.jpg';
 import logo from './logo.svg';
 import './App.css';
 import {Curve, Create, Num, Geom, CanvasSpace, Pt, Group} from "pts"
 import * as THREE from 'three';
-import * as OBJLoader from 'three-obj-loader';
 import * as Dither from 'canvas-dither';
-
-OBJLoader(THREE);
+import clm from 'clmtrackr';
 
 const points = [
 	'face',
@@ -727,44 +724,26 @@ const points = [
 	'AU45_c'
 ]
 
-const dat = require('dat.gui');
-// 1280 / 2266
-var objLoader;
 var fov = 70;
 
-var vidWidth = 1133; //320
-var vidHeight = 640;
+var vidWidth = 950; //1280
+var vidHeight = 720; //720
 
 
 var canvasWidth = vidWidth / 2;
 var canvasHeight = vidHeight / 2;
-var tiltSpeed = 0.1;
-var tiltAmount = 0.5;
 var startTime = Date.now();
 
-//var perlin = new ImprovedNoise();
-var camera, scene, renderer;
-var mouseX = 0;
-var mouseY = 0;
-var windowHalfX, windowHalfY;
-var videoIn, videoInTexture;
+var renderer;
 var mainGroup;
 var geometry;
 var vidCanvas;
 var vidCanvasCtx;
-var ctx;
-var pixels;
-var noisePosn = 0;
-var wireMaterial;
-var meshMaterial;
-var container;
 var params;
-var title, info, prompt;
+var title, prompt;
 var canvasText;
 var uniforms; 
-var wiremirror;
 var backgroundImage;
-var videoInTextureMask;
 
 class Mac extends Component {
 	constructor(props){
@@ -807,7 +786,7 @@ class Mac extends Component {
 			clipPoints.push(`${bufferObj[`x_${i}`]}px ${bufferObj[`y_${i}`]}px`);
 		}
 
-		this.setState({...newState, clipPoints, ...{ centerX: bufferObj['x_33'], centerY: bufferObj['y_33']}});
+		// this.setState({...newState, clipPoints, ...{ centerX: bufferObj['x_33'], centerY: bufferObj['y_33']}});
 	}
 
 
@@ -818,81 +797,49 @@ class Mac extends Component {
 	}
 
 	animate() {
-		this.head.rotateY(0.001);
 		requestAnimationFrame(this.animate);
 		this.renderCanvas();
 	}
 
 	renderCanvas() {
-		mainGroup.scale.setScalar(this.params.zoom);
-		mainGroup.rotation.x += (mouseY * tiltAmount - mainGroup.rotation.x) * tiltSpeed;
-		mainGroup.rotation.y += (mouseX * tiltAmount - mainGroup.rotation.y) * tiltSpeed;
 		uniforms.centerX.value = this.state.centerX;
 		uniforms.centerY.value = this.state.centerY;
-		//camera.lookAt(camera.target);
 		renderer.render(this.scene, this.camera);
 	}
 
 	onCamMetaDataLoaded() {
-		function WCMParams() {
-		this.zoom = 2;
-		this.mOpac = 1;
-		this.wfOpac = 0.1;
-		this.contrast = 3;
-		this.saturation = 1;
-		this.invertZ = false;
-		this.zDepth = 400;
-		this.noiseStrength = 200;
-		this.noiseScale = 0.01;
-		this.noiseSpeed = 0.02;
-		//this.doSnapshot = function() {};
-	}
-	// stop the user getting a text cursor
+		// stop the user getting a text cursor
 		document.onselectstart = function() {
 			return false;
 		};
 
-		//init control panel
-		this.params = new WCMParams();
-		this.gui = new dat.GUI();
-		this.gui
-			.add(this.params, 'zoom', 0.1, 5)
-			.name('Zoom')
-			.onChange(this.onParamsChange);
-		this.gui.add(this.params, 'zDepth', 0, 1000).name('Z Depth');
-		this.gui
-			.add(this.params, 'mOpac', 0, 1)
-			.name('Mesh Opacity')
-			.onChange(this.onParamsChange);
-		this.gui
-			.add(this.params, 'wfOpac', 0, 0.3)
-			.name('Grid Opacity')
-			.onChange(this.onParamsChange);
-		this.gui
-			.add(this.params, 'contrast', 1, 5)
-			.name('Contrast')
-			.onChange(this.onParamsChange);
-		this.gui
-			.add(this.params, 'saturation', 0, 2)
-			.name('Saturation')
-			.onChange(this.onParamsChange);
-		this.gui.add(this.params, 'noiseStrength', 0, 600).name('Noise Strength');
-		this.gui.add(this.params, 'noiseSpeed', 0, 0.05).name('Noise Speed');
-		this.gui.add(this.params, 'noiseScale', 0, 0.1).name('Noise Scale');
-		this.gui.add(this.params, 'invertZ').name('Invert Z');
-		this.gui.close();
-		this.gui.domElement.style.display = 'none';
 
 		// Init 3D
 		this.scene = new THREE.Scene();
-		this.camera = new THREE.PerspectiveCamera(fov, 2.5 , 1, 5000); //CHANGE ASPECT RATIO
+		this.camera = new THREE.PerspectiveCamera(fov, vidWidth / vidHeight, 1, 5000); //CHANGE ASPECT RATIO
 		this.camera.target = new THREE.Vector3(0, 0, 0);
 		this.scene.add(this.camera);
-		this.camera.position.z = 600;
+		this.camera.position.z = 500;
 
 		// Toggle UI
-		videoInTexture = new THREE.VideoTexture(this.video);
-		videoInTextureMask = new THREE.VideoTexture(this.videoFrog);
+		var videoInTexture = new THREE.VideoTexture(this.video);
+		var videoInTextureMask = new THREE.VideoTexture(this.videoFrog);
+		var ctracker = new clm.tracker();
+
+		ctracker.init();
+		ctracker.start(this.video);
+
+		var that = this;
+		function positionLoop() {
+			requestAnimationFrame(positionLoop);
+			var positions = ctracker.getCurrentPosition();
+			// console.log(positions.length)
+			// positions = [[x_0, y_0], [x_1,y_1], ... ]
+			if (positions) {
+				that.setState({ centerX: positions[62][0], centerY: positions[62][1]});
+			}
+		  }
+		positionLoop();
 
 		uniforms = {
 				texture1: { // Main webcam
@@ -907,7 +854,7 @@ class Mac extends Component {
 				texture3: { // Moving Mask
 					type: 't',
 					// value: videoInTextureMask
-					value: new THREE.TextureLoader().load( pixel )
+					value: new THREE.TextureLoader().load( mulFrogs )
 				},
 				centerX: {
 					type: "f",
@@ -920,10 +867,8 @@ class Mac extends Component {
 				resolution: { type: "v2", value: new THREE.Vector2() }
 		};
 
-		// Some adjustments for BLUR SHADER
-		// TODO: Fix aspect ratio for face coordinates to be accurate
-		uniforms.resolution.value.x = vidWidth / 3.1;
-		uniforms.resolution.value.y = vidHeight / 1.2;
+		uniforms.resolution.value.x = vidWidth;
+		uniforms.resolution.value.y = vidHeight;
 
 		/////////////////////////
 		// BLUR FACE SHADER /////
@@ -945,7 +890,7 @@ class Mac extends Component {
 				uniform vec2 resolution;
 				varying vec2 vUv;
 
-				float scale = 1.0;
+				float scale = 2.0;
 				vec2 getLocation(float x, float y, vec2 vUv) {
 					vec2 location;
 					float distance = sqrt(pow((centerX / resolution.x) - x, 2.) + pow((centerY  / resolution.y) - y, 2.));
@@ -961,11 +906,12 @@ class Mac extends Component {
 				}
 
 				void main() {
-					vec3 rgb = texture2D(map, getLocation(vUv.x * 1.77, 1. - vUv.y, vUv * 40.)/40.).rgb;
+					vec3 rgb = texture2D(map, getLocation(vUv.x, 1. - vUv.y, vUv * 40.)/40.).rgb;
 					gl_FragColor = vec4(rgb, 1.0);
 				}
 				`,
 		});
+
 		///////////////////////////
 		// RANDOM GRID SHADER /////
 		///////////////////////////
@@ -1139,91 +1085,62 @@ class Mac extends Component {
 		mainGroup = new THREE.Object3D();
 		this.scene.add(mainGroup);
 
-		objLoader.load(
-			head,
-			// called when resource is loaded
-			( object ) => {
-				this.head = object;
-				geometry = new THREE.PlaneGeometry(canvasWidth, canvasHeight, canvasWidth, canvasHeight);
-				geometry.dynamic = true;
 
-				object.scale.set( 40, 40, 40 )
-				object.position.set(0, -170, 0);
-				meshMaterial = new THREE.MeshBasicMaterial({
-					opacity: 1,
-					map: videoInTexture,
-				});
+		geometry = new THREE.PlaneGeometry(vidWidth, vidHeight, vidWidth, vidHeight);
+		geometry.dynamic = true;
 
-				object.traverse(function(child) {
-						if (child instanceof THREE.Mesh) {
-								child.material = meshMaterial;
-						}
-				});
+		var meshMaterial = new THREE.MeshBasicMaterial({
+			opacity: 1,
+			map: videoInTexture,
+		});
 
-				var mirror = new THREE.Mesh(geometry, meshMaterial);
-				mainGroup.add(mirror);
-				// mainGroup.add(object); // ADD HEAD TO SCENE
+		var mirror = new THREE.Mesh(geometry, meshMaterial);
+		mainGroup.add(mirror);
 
-				//add wireframe plane
-				// wireMaterial = new THREE.MeshBasicMaterial({
-				// 	opacity: 0.1,
-				// 	color: 0xffffff,
-				// 	wireframe: true,
-				// 	blending: THREE.AdditiveBlending,
-				// 	transparent: true,
-				// });
+		////////////////////////////////////////////////////
+		//////////// CHANGE SHADER EFFECT HERE /////////////
+		////////////////////////////////////////////////////
 
-				////////////////////////////////////////////////////
-				//////////// CHANGE SHADER EFFECT HERE /////////////
-				////////////////////////////////////////////////////
+		var wiremirror = new THREE.Mesh(geometry, shaderMaterial);
+		// wiremirror = new THREE.Mesh(geometry, shaderMaterialGrid);
+		// wiremirror = new THREE.Mesh(geometry, shaderMaterialGridFrog);
 
-				// wiremirror = new THREE.Mesh(geometry, shaderMaterial);
-				// wiremirror = new THREE.Mesh(geometry, shaderMaterialGrid);
-				wiremirror = new THREE.Mesh(geometry, shaderMaterialGridFrog);
+		////////////////////////////////////////////////////
 
-				////////////////////////////////////////////////////
+		mainGroup.add(wiremirror);
+		wiremirror.position.z = 5;
 
-				mainGroup.add(wiremirror);
-				wiremirror.position.z = 5;
+		//init renderer
+		renderer = new THREE.WebGLRenderer({
+			antialias: true,
+		});
+		renderer.sortObjects = false;
+		renderer.setSize(vidWidth, vidHeight); //CHANGE ASPECT RATIO
+		this.canvas = renderer.domElement;
+		this.container.appendChild(renderer.domElement);
 
-				//init renderer
-				renderer = new THREE.WebGLRenderer({
-					antialias: true,
-				});
-				renderer.sortObjects = false;
-				// renderer.setPixelRatio( window.devicePixelRatio );
-				renderer.setSize(vidWidth, vidHeight); //CHANGE ASPECT RATIO
-				this.canvas = renderer.domElement;
-				this.container.appendChild(renderer.domElement);
-
-				//vidCanvas to draw screenshot from video
-				vidCanvas = document.createElement('canvas');
-				vidCanvas.width = 1280;
-				vidCanvas.height = 960;
-				vidCanvasCtx = vidCanvas.getContext('2d');
-				// document.body.appendChild(vidCanvas);
-				// vidCanvas.style.position = 'absolute';
-				// vidCanvas.style.display = 'none';
-				
-				//handle WebGL context lost
-				renderer.domElement.addEventListener(
-					'webglcontextlost',
-					function(event) {
-						prompt.style.display = 'inline';
-						prompt.innerHTML = 'WebGL Context Lost. Please try reloading the page.';
-					},
-					false
-				);
-
-				//onResize();
-
-				this.animate();
+		//vidCanvas to draw screenshot from video
+		vidCanvas = document.createElement('canvas');
+		vidCanvas.width = vidWidth;
+		vidCanvas.height = vidHeight;
+		vidCanvasCtx = vidCanvas.getContext('2d');
+		// document.body.appendChild(vidCanvas);
+		// vidCanvas.style.position = 'absolute';
+		// vidCanvas.style.display = 'none';
+		
+		//handle WebGL context lost
+		renderer.domElement.addEventListener(
+			'webglcontextlost',
+			function(event) {
+				prompt.style.display = 'inline';
+				prompt.innerHTML = 'WebGL Context Lost. Please try reloading the page.';
 			},
-			// called when loading is in progresses
-			( xhr ) => { console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' ); },
-			// called when loading has errors
-			( error ) => { console.log( 'An error happened' ); }
+			false
 		);
+
+		//onResize();
+
+		this.animate();
 	}
 
 
@@ -1232,12 +1149,17 @@ class Mac extends Component {
 		websocket.onopen = evt => { this.onOpen(evt) };
 		websocket.onmessage = evt => { this.onMessage(evt) };
 
-		this.video = document.querySelector("#videoElement");
-		this.videoFrog = document.querySelector("#videoElementMask");
+		this.video = document.getElementById('videoel');
+		// this.video = document.createElement('video');
+		this.video.autoplay = true;
+		// this.video.loop = true;
+		// this.video.playsinline = true;
+		// this.video.style.width = vidWidth;
+		// this.video.style.height = vidHeight;
+		// document.body.appendChild(this.video);
 		this.container = document.querySelector('#testContainer');
 
 		this.THREE = THREE;
-		objLoader = new this.THREE.OBJLoader();
 		if (navigator.mediaDevices.getUserMedia) {  
 			var that = this;
 			navigator.mediaDevices.getUserMedia({video: true})
@@ -1290,30 +1212,17 @@ class Mac extends Component {
 	}
 
 	render() {
-		// let clipPoints = this.state.clipPoints
-		//style={{'clipPath': `polygon(${this.state.clipPoints.join(', ')})`}}
 		return (
 			<div className="App">
-				<div style={{position: 'relative', width: '720px', height: '1280px', margin: 'auto'}}>
-					<h3 style={{}}> frog </h3>
-					<video autoPlay={true} id="videoElement" style={{position: 'relative', top: '200px', clipPath: `polygon(${this.state.clipPoints.join(', ')})`}}></video>
-					<video src={warp} autoPlay={true} loop={true} id="videoElementMask" style={{display: 'none'}}></video>
-					<div style={{position: 'absolute', top: 0}}>
-						<img src={frog} style={{position: 'absolute'}}/>
-						<img src={frogEye} style={{position: 'absolute', top: '0px', zIndex: 5, left: `${this.state.xTranslate}px`, top: `${this.state.yTranslate}px`}}/>
-						<div id='mouth' style={{position: 'absolute', top: '0px', width: '100vw'}}/>
-					</div>
-				</div>
+				<div id="testContainer" />
+				<video id="videoel" width={vidWidth} height={vidHeight} preload="auto" loop playsinline autoplay style={{position: 'absolute', zIndex: '-5', top: 0, left: 0}}>
+				</video>
 				<button onClick={() => {
-					vidCanvasCtx.drawImage(this.video, 0, 0, vidCanvas.width, vidCanvas.height);
-					var dataURI = vidCanvas.toDataURL('image/jpeg');
-					backgroundImage = new THREE.TextureLoader().load( dataURI );
-					uniforms.texture2.value = backgroundImage;
-				}}> <div style={{}}> take pic </div> </button>
-				<div style={{position: 'relative'}}>
-					<div  id="ready" style={{position: 'absolute', left: '500px', top: '180px'}}/>
-					<div id="testContainer" />
-				</div>
+						vidCanvasCtx.drawImage(this.video, 0, 0, vidCanvas.width, vidCanvas.height);
+						var dataURI = vidCanvas.toDataURL('image/jpeg');
+						backgroundImage = new THREE.TextureLoader().load( dataURI );
+						uniforms.texture2.value = backgroundImage;
+					}} style={{top: '300px', position: 'relative'}}> <div style={{}}> take pic </div> </button>
 			</div>
 		);
 	}

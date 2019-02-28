@@ -216,3 +216,17 @@ h3 {
   /*width: 100vw;*/
   background-color: #666;
 }
+
+@keyframes rotate3d {
+  0% {
+    transform: perspective(1000px) rotateY(0deg);
+  }
+
+  100% {
+    transform: perspective(1000px) rotateY(360deg);
+  }
+}
+
+.smiley {
+  /*animation: rotate3d 8s linear infinite;*/
+}

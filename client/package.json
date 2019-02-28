@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "canvas-dither": "^1.0.0",
+    "clmtrackr": "^1.1.2",
     "dat.gui": "^0.7.5",
     "glsl-dither": "^1.0.1",
     "pts": "^0.6.7",
