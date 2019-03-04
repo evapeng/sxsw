@@ -6,9 +6,10 @@ import celeb from './res/pixel_50.jpg';
 import logo from './logo.svg';
 import './App.css';
 import {Curve, Create, Num, Geom, CanvasSpace, Pt, Group} from "pts"
-import * as THREE from 'three';
 import * as Dither from 'canvas-dither';
 import clm from 'clmtrackr';
+import getShader from './shaders/Shader.js';
+import * as THREE from 'three';
 
 const points = [
 	'face',
@@ -726,11 +727,8 @@ const points = [
 
 var fov = 70;
 
-var vidWidth = 950; //1280 //mimo 1280 //fb 950
-var vidHeight = 720; //720 //mimo 800 //fb 720
-
-var windowWidth = 10.02;
-var windowHeight = 6.26;
+var vidWidth = 1280; //1280 //mimo 1280 //fb 950
+var vidHeight = 970; //720 //mimo 800 //fb 720
 
 var canvasWidth = vidWidth / 2;
 var canvasHeight = vidHeight / 2;
@@ -821,7 +819,7 @@ class Mac extends Component {
 		this.camera = new THREE.PerspectiveCamera(fov, vidWidth / vidHeight, 1, 5000); //CHANGE ASPECT RATIO
 		this.camera.target = new THREE.Vector3(0, 0, 0);
 		this.scene.add(this.camera);
-		this.camera.position.z = 500;
+		this.camera.position.z = 200;
 
 		// Toggle UI
 		var videoInTexture = new THREE.VideoTexture(this.video);
@@ -835,7 +833,6 @@ class Mac extends Component {
 		function positionLoop() {
 			requestAnimationFrame(positionLoop);
 			var positions = ctracker.getCurrentPosition();
-			// console.log(positions.length)
 			// positions = [[x_0, y_0], [x_1,y_1], ... ]
 			if (positions) {
 				that.setState({ centerX: positions[62][0], centerY: positions[62][1]});
@@ -872,410 +869,10 @@ class Mac extends Component {
 		uniforms.resolution.value.x = vidWidth;
 		uniforms.resolution.value.y = vidHeight;
 
-		/////////////////////////
-		// BLUR FACE SHADER /////
-		/////////////////////////
-		var shaderMaterial = new THREE.ShaderMaterial({
-				uniforms: uniforms,
-				vertexShader: `attribute vec3 center;
-				varying vec3 vCenter;
-				varying vec2 vUv;
-				void main() {
-						vCenter = center;
-						vUv = uv;
-						gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-				}`,
-				fragmentShader: `
-				uniform sampler2D map;
-				uniform float centerX;
-				uniform float centerY;
-				uniform vec2 resolution;
-				varying vec2 vUv;
-
-				float scale = 2.0;
-				vec2 getLocation(float x, float y, vec2 vUv) {
-					vec2 location;
-					float distance = sqrt(pow((centerX / resolution.x) - x, 2.) + pow((centerY  / resolution.y) - y, 2.));
-					if (distance < .35) {
-						float scaled = smoothstep(.35, 0., distance);
-						vec2 diff = vUv - floor(vUv); // [0, 1)
-						location = vUv - (diff * scaled);
-					}
-					else {
-						location = vUv;
-					}
-					return location;
-				}
-
-				void main() {
-					vec3 rgb = texture2D(map, getLocation(vUv.x, 1. - vUv.y, vUv * 40.)/40.).rgb;
-					vec3 lum = vec3(0.299, 0.587, 0.114);
-					gl_FragColor = vec4(rgb, 1.0);
-				}
-				`,
-		});
-
-		///////////////////////////////////
-		// BLUR FACE SHADER GRAYSCALE /////
-		//////////////////////////////////
-		var shaderMaterialGrayscale = new THREE.ShaderMaterial({
-				uniforms: uniforms,
-				vertexShader: `attribute vec3 center;
-				varying vec3 vCenter;
-				varying vec2 vUv;
-				void main() {
-						vCenter = center;
-						vUv = uv;
-						gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-				}`,
-				fragmentShader: `
-				uniform sampler2D map;
-				uniform float centerX;
-				uniform float centerY;
-				uniform vec2 resolution;
-				varying vec2 vUv;
-
-				float find_closest(int x, int y, float c0) {
-					vec4 dither0 = vec4( 1.0, 33.0, 9.0, 41.0);
-					vec4 dither1 = vec4(49.0, 17.0, 57.0, 25.0);
-					vec4 dither2 = vec4(13.0, 45.0, 5.0, 37.0);
-					vec4 dither3 = vec4(61.0, 29.0, 53.0, 21.0);
-					float limit = 0.0;
-					float value = 0.0;
-					vec4 dither;
-					if(x == 0) {
-						dither = dither0;
-					} else if(x == 1) {
-						dither = dither1;
-					} else if(x == 2) {
-						dither = dither2;
-					} else if(x == 3) {
-						dither = dither3;
-					}
-					if(x < 4) {
-						if(y == 0) {
-							value = dither[0];
-						} else if(y == 1) {
-							value = dither[1];
-						} else if(y == 2) {
-							value = dither[2];
-						} else if(y == 3) {
-							value = dither[3];
-						}
-						limit = (value + 1.0) / 64.0;
-					}
-					if(c0 < limit) {
-						return 0.0;
-					} else {
-						return 1.0;
-					}
-				}
-
-				float scale = 2.0;
-				float pixelScale = 1.0;
-				vec2 getLocation(float x, float y, vec2 vUv) {
-					vec2 location;
-					float distance = sqrt(pow((centerX / resolution.x) - x, 2.) + pow((centerY  / resolution.y) - y, 2.));
-					if (distance < .35) {
-						float scaled = smoothstep(.35, 0., distance);
-						vec2 diff = vUv - floor(vUv); // [0, 1)
-						location = vUv - (diff * scaled);
-					}
-					else {
-						location = vUv;
-					}
-					return location;
-				}
-
-				void main() {
-					// vec3 rgb = texture2D(map, getLocation(vUv.x, 1. - vUv.y, vUv * 40.)/40.).rgb; //With face blur
-					vec3 rgb = texture2D(map, vUv).rgb;
-					vec3 lum = vec3(0.299, 0.587, 0.114);
-
-					float grayscale = dot(rgb, lum);
-
-					vec2 xy = gl_FragCoord.xy * pixelScale;
-					int x = int(mod(xy.x, 4.0));
-					int y = int(mod(xy.y, 4.0));
-					vec3 finalRGB;
-
-					// b&w
-					finalRGB.r = find_closest(x, y, grayscale);
-					finalRGB.g = find_closest(x, y, grayscale);
-					finalRGB.b = find_closest(x, y, grayscale);
-					gl_FragColor = vec4(finalRGB, 1.0);
-				}
-				`,
-		});
-
-		//////////////////////////////////
-		// BLUR FACE SHADER TWO-TONE /////
-		//////////////////////////////////
-		var shaderMaterialTwoTone = new THREE.ShaderMaterial({
-				uniforms: uniforms,
-				vertexShader: `attribute vec3 center;
-				varying vec3 vCenter;
-				varying vec2 vUv;
-				void main() {
-						vCenter = center;
-						vUv = uv;
-						gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-				}`,
-				fragmentShader: `
-				uniform sampler2D map;
-				uniform float centerX;
-				uniform float centerY;
-				uniform vec2 resolution;
-				varying vec2 vUv;
-
-				float find_closest(int x, int y, float c0) {
-					vec4 dither0 = vec4( 1.0, 33.0, 9.0, 41.0);
-					vec4 dither1 = vec4(49.0, 17.0, 57.0, 25.0);
-					vec4 dither2 = vec4(13.0, 45.0, 5.0, 37.0);
-					vec4 dither3 = vec4(61.0, 29.0, 53.0, 21.0);
-					float limit = 0.0;
-					float value = 0.0;
-					vec4 dither;
-					if(x == 0) {
-						dither = dither0;
-					} else if(x == 1) {
-						dither = dither1;
-					} else if(x == 2) {
-						dither = dither2;
-					} else if(x == 3) {
-						dither = dither3;
-					}
-					if(x < 4) {
-						if(y == 0) {
-							value = dither[0];
-						} else if(y == 1) {
-							value = dither[1];
-						} else if(y == 2) {
-							value = dither[2];
-						} else if(y == 3) {
-							value = dither[3];
-						}
-						limit = (value + 1.0) / 64.0;
-					}
-					if(c0 < limit) {
-						return 0.0;
-					} else {
-						return 1.0;
-					}
-				}
-
-				float scale = 2.0;
-				float pixelScale = 1.0;
-				vec2 getLocation(float x, float y, vec2 vUv) {
-					vec2 location;
-					float distance = sqrt(pow((centerX / resolution.x) - x, 2.) + pow((centerY  / resolution.y) - y, 2.));
-					if (distance < .35) {
-						float scaled = smoothstep(.35, 0., distance);
-						vec2 diff = vUv - floor(vUv); // [0, 1)
-						location = vUv - (diff * scaled);
-					}
-					else {
-						location = vUv;
-					}
-					return location;
-				}
-
-				void main() {
-					vec3 rgb = texture2D(map, getLocation(vUv.x, 1. - vUv.y, vUv * 40.)/40.).rgb;
-					vec3 lum = vec3(0.299, 0.587, 0.114);
-
-					float grayscale = dot(rgb, lum);
-
-					vec2 xy = gl_FragCoord.xy * pixelScale;
-					int x = int(mod(xy.x, 4.0));
-					int y = int(mod(xy.y, 4.0));
-					vec3 finalRGB;
-
-					// halftone
-					float m = find_closest(x, y, grayscale);
-					vec3 darkRGB = vec3(0.45, 0.26, 0.96);
-					vec3 lightRGB = vec3(0.96, 0.45, 0.1);
-					finalRGB = mix(darkRGB, lightRGB, m);
-					gl_FragColor = vec4(finalRGB, 1.0);
-				}
-				`,
-		});
-
-		///////////////////////////
-		// RANDOM GRID SHADER /////
-		///////////////////////////
-		var shaderMaterialGrid = new THREE.ShaderMaterial({
-				uniforms: uniforms,
-				vertexShader: `attribute vec3 center;
-				varying vec3 vCenter;
-				varying vec2 vUv;
-				void main() {
-						vCenter = center;
-						vUv = uv;
-						gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-				}`,
-				fragmentShader: `
-				uniform sampler2D map;
-				uniform sampler2D texture1;
-				uniform sampler2D texture2;
-				uniform float centerX;
-				uniform float centerY;
-				uniform vec2 resolution;
-				varying vec2 vUv;
-
-				float random(float x, float y, vec2 vUv) {
-					float rand = fract(sin(dot(floor(vUv * 20.0), vec2(12.9898,78.233))) * 43758.5453123);
-					return step(0.5, rand);
-				}
-
-				void main() {
-					float scale = random(vUv.x, vUv.y, vUv);
-					vec3 rgb = texture2D(texture1, vUv).rgb;
-					vec3 rgb2 = texture2D(texture2, vUv).rgb;
-					vec3 rgbfinal;
-					rgbfinal.r = rgb.r * (1.0 - scale) + (rgb2.r * scale);
-					rgbfinal.g = rgb.g * (1.0 - scale) + (rgb2.g * scale);
-					rgbfinal.b = rgb.b * (1.0 - scale) + (rgb2.b * scale);
-					gl_FragColor = vec4(rgbfinal, 1.0);
-				}
-				`,
-		});
-
-		/////////////////////////
-		// FROG GRID SHADER /////
-		/////////////////////////
-		var shaderMaterialGridFrog = new THREE.ShaderMaterial({
-				uniforms: uniforms,
-				vertexShader: `attribute vec3 center;
-				varying vec3 vCenter;
-				varying vec2 vUv;
-				void main() {
-						vCenter = center;
-						vUv = uv;
-						gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-				}`,
-				fragmentShader: `
-				uniform sampler2D map;
-				uniform sampler2D texture1;
-				uniform sampler2D texture2;
-				uniform sampler2D texture3;
-				uniform float centerX;
-				uniform float centerY;
-				uniform vec2 resolution;
-				varying vec2 vUv;
-
-				float random(float x, float y, vec2 vUv) {
-					float rand = fract(sin(dot(floor(vUv * 20.0), vec2(12.9898,78.233))) * 43758.5453123);
-					return step(0.5, rand);
-				}
-
-				float getPixel(float x, float y, vec2 vUv) {
-					vec4 rgbPixel = texture2D(texture3, vUv);
-					return step(0.5, rgbPixel.r);
-				}
-
-				void main() {
-					float scale = getPixel(vUv.x, vUv.y, vUv);
-					vec3 rgb = texture2D(texture1, vUv).rgb;
-					vec3 rgb2 = texture2D(texture2, vUv).rgb;
-					vec3 rgbfinal;
-					rgbfinal.r = rgb.r * (1.0 - scale) + (rgb2.r * scale);
-					rgbfinal.g = rgb.g * (1.0 - scale) + (rgb2.g * scale);
-					rgbfinal.b = rgb.b * (1.0 - scale) + (rgb2.b * scale);
-					gl_FragColor = vec4(rgbfinal, 1.0);
-				}
-				`,
-		});
-
-
-		////////////////////////////
-		// DITHER SHADER (REF) /////
-		////////////////////////////
-		var shaderMaterialBlur = new THREE.ShaderMaterial({
-				uniforms: uniforms,
-				vertexShader: `attribute vec3 center;
-				varying vec3 vCenter;
-				varying vec2 vUv;
-				void main() {
-						vCenter = center;
-						vUv = uv;
-						gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-				}`,
-				fragmentShader: `
-				uniform sampler2D map;
-
-				varying vec2 vUv;
-				float scale = 1.0;
-
-				float find_closest(int x, int y, float c0) {
-					
-					vec4 dither0 = vec4( 1.0, 33.0, 9.0, 41.0);
-					vec4 dither1 = vec4(49.0, 17.0, 57.0, 25.0);
-					vec4 dither2 = vec4(13.0, 45.0, 5.0, 37.0);
-					vec4 dither3 = vec4(61.0, 29.0, 53.0, 21.0);
-					
-					float limit = 0.0;
-					float value = 0.0;
-					
-					vec4 dither;
-					
-					if(x == 0) {
-						dither = dither0;
-					} else if(x == 1) {
-						dither = dither1;
-					} else if(x == 2) {
-						dither = dither2;
-					} else if(x == 3) {
-						dither = dither3;
-					}
-					
-					if(x < 4) {
-						if(y == 0) {
-							value = dither[0];
-						} else if(y == 1) {
-							value = dither[1];
-						} else if(y == 2) {
-							value = dither[2];
-						} else if(y == 3) {
-							value = dither[3];
-						}
-					
-						limit = (value + 1.0) / 64.0;
-					}
-
-					if(c0 < limit) {
-						return 0.0;
-					} else {
-						return 1.0;
-					}
-				}
-
-				void main() {
-					
-					vec3 lum = vec3(0.299, 0.587, 0.114);
-					float grayscale = dot(texture2D(map, vUv).rgb, lum);
-					vec3 rgb = texture2D(map, vUv).rgb;
-
-					vec2 xy = gl_FragCoord.xy * scale;
-					int x = int(mod(xy.x, 4.0));
-					int y = int(mod(xy.y, 4.0));
-
-					vec3 finalRGB;
-
-					finalRGB.r = find_closest(x, y, rgb.r);
-					finalRGB.g = find_closest(x, y, rgb.g);
-					finalRGB.b = find_closest(x, y, rgb.b);
-
-					gl_FragColor = vec4(finalRGB, 1.0);
-				}
-				`,
-		});
-
 		mainGroup = new THREE.Object3D();
 		this.scene.add(mainGroup);
 
-
-		geometry = new THREE.PlaneGeometry(canvasWidth, canvasHeight, vidWidth, vidHeight);
+		geometry = new THREE.PlaneGeometry(canvasWidth, canvasHeight, canvasWidth, canvasHeight);
 		geometry.dynamic = true;
 
 		var meshMaterial = new THREE.MeshBasicMaterial({
@@ -1290,16 +887,20 @@ class Mac extends Component {
 		//////////// CHANGE SHADER EFFECT HERE /////////////
 		////////////////////////////////////////////////////
 
-		var wiremirror = new THREE.Mesh(geometry, shaderMaterial);
-		var wiremirrorGray = new THREE.Mesh(geometry, shaderMaterialGrayscale);
-		var wiremirrorTwoTone = new THREE.Mesh(geometry, shaderMaterialTwoTone);
-		// wiremirror = new THREE.Mesh(geometry, shaderMaterialGrid);
-		// wiremirror = new THREE.Mesh(geometry, shaderMaterialGridFrog);
+		//With face
+		var wiremirror = new THREE.Mesh(geometry, getShader('blurFace', uniforms, false));
+		var wiremirrorGray = new THREE.Mesh(geometry, getShader('blurFaceBW', uniforms, false));
+		var wiremirrorTwoTone = new THREE.Mesh(geometry, getShader('blurFaceTT', uniforms, false));
+
+		//Without face
+		var wiremirrorF = new THREE.Mesh(geometry, getShader('blurFace', uniforms, true));
+		var wiremirrorGrayF = new THREE.Mesh(geometry, getShader('blurFaceBW', uniforms, true));
+		var wiremirrorTwoToneF = new THREE.Mesh(geometry, getShader('blurFaceTT', uniforms, true));
 
 		////////////////////////////////////////////////////
 
 		mainGroup.add(wiremirrorGray);
-		wiremirror.position.z = 5;
+		wiremirror.position.z = 1;
 
 		//init renderer
 		renderer = new THREE.WebGLRenderer({
@@ -1330,17 +931,21 @@ class Mac extends Component {
 		);
 		//switch shader
 		let shaderIndex = 0;
-		let shaders = [wiremirrorGray, wiremirrorTwoTone, wiremirror];
+		let shaders = [wiremirrorGray,
+					   wiremirrorTwoTone,
+					   wiremirror,
+					   wiremirrorGrayF,
+					   wiremirrorTwoToneF,
+					   wiremirrorF];
+
 		document.addEventListener('keydown', function(event){
 			if(event.keyCode === 32) {
-				console.log(shaders[shaderIndex])
 				mainGroup.remove(shaders[shaderIndex % shaders.length]);
 				mainGroup.add(shaders[++shaderIndex % shaders.length])
 			}
 		} );
 
 		//onResize();
-
 		this.animate();
 	}
 
@@ -1351,13 +956,7 @@ class Mac extends Component {
 		websocket.onmessage = evt => { this.onMessage(evt) };
 
 		this.video = document.getElementById('videoel');
-		// this.video = document.createElement('video');
 		this.video.autoplay = true;
-		// this.video.loop = true;
-		// this.video.playsinline = true;
-		// this.video.style.width = vidWidth;
-		// this.video.style.height = vidHeight;
-		// document.body.appendChild(this.video);
 		this.container = document.querySelector('#testContainer');
 
 		this.THREE = THREE;
@@ -1378,14 +977,7 @@ class Mac extends Component {
 		return (
 			<div className="App">
 				<div id="testContainer" />
-				<video id="videoel" width={vidWidth} height={vidHeight} preload="auto" loop playsinline autoplay style={{position: 'absolute', zIndex: '-5', top: 0, left: 0}}>
-				</video>
-				<button onClick={() => {
-						vidCanvasCtx.drawImage(this.video, 0, 0, vidCanvas.width, vidCanvas.height);
-						var dataURI = vidCanvas.toDataURL('image/jpeg');
-						backgroundImage = new THREE.TextureLoader().load( dataURI );
-						uniforms.texture2.value = backgroundImage;
-					}} style={{top: '300px', position: 'relative'}}> <div style={{}}> take pic </div> </button>
+				<video id="videoel" width={vidWidth} height={vidHeight} preload="auto" loop playsinline autoplay style={{position: 'absolute', zIndex: '-5', top: 0, left: 0}}/>
 			</div>
 		);
 	}
