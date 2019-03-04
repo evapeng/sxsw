@@ -726,9 +726,11 @@ const points = [
 
 var fov = 70;
 
-var vidWidth = 950; //1280
-var vidHeight = 720; //720
+var vidWidth = 950; //1280 //mimo 1280 //fb 950
+var vidHeight = 720; //720 //mimo 800 //fb 720
 
+var windowWidth = 10.02;
+var windowHeight = 6.26;
 
 var canvasWidth = vidWidth / 2;
 var canvasHeight = vidHeight / 2;
@@ -1273,7 +1275,7 @@ class Mac extends Component {
 		this.scene.add(mainGroup);
 
 
-		geometry = new THREE.PlaneGeometry(vidWidth, vidHeight, vidWidth, vidHeight);
+		geometry = new THREE.PlaneGeometry(canvasWidth, canvasHeight, vidWidth, vidHeight);
 		geometry.dynamic = true;
 
 		var meshMaterial = new THREE.MeshBasicMaterial({
@@ -1296,7 +1298,7 @@ class Mac extends Component {
 
 		////////////////////////////////////////////////////
 
-		mainGroup.add(wiremirror);
+		mainGroup.add(wiremirrorGray);
 		wiremirror.position.z = 5;
 
 		//init renderer
@@ -1328,7 +1330,7 @@ class Mac extends Component {
 		);
 		//switch shader
 		let shaderIndex = 0;
-		let shaders = [wiremirror, wiremirrorGray, wiremirrorTwoTone];
+		let shaders = [wiremirrorGray, wiremirrorTwoTone, wiremirror];
 		document.addEventListener('keydown', function(event){
 			if(event.keyCode === 32) {
 				console.log(shaders[shaderIndex])
@@ -1369,44 +1371,6 @@ class Mac extends Component {
 				console.log("Something went wrong!");
 			});
 		}
-
-		// Blotter (animated text) stuff below
-		const script = document.createElement("script");
-		const script2 = document.createElement("script");
-
-		script.src = "https://blotter-js.herokuapp.com/blotter.min.js";
-		script.async = true;
-		script2.src = "https://blotter-js.herokuapp.com/liquidDistortMaterial.js";
-		script2.async = true;
-
-		// script.onload = () => {
-		// 	console.log('SCRIPT LOADED')
-		// 	canvasText = new window.Blotter.Text("frog50", {
-		// 		family : "sans-serif",
-		// 		size : 50,
-		// 		fill : "#000",
-		// 		uSpeed: .1,
-		// 		uVolatility: .15,
-		// 		uSeed: .1
-		// 	});
-		// }
-
-		// script2.onload = () => {
-		// 	if (canvasText){
-		// 		var blotterMaterial = new window.Blotter.LiquidDistortMaterial();
-		// 		blotterMaterial.uniforms.uSpeed.value = 0.25;
-		// 					blotterMaterial.uniforms.uVolatility.value = 0.15;
-		// 		var blotter = new window.Blotter(blotterMaterial, { texts : canvasText });
-		// 		var elem = document.getElementById("ready");
-		// 		var scope = blotter.forText(canvasText);
-
-		// 		scope.appendTo(elem);
-		// 	}
-		// }
-
-		// document.body.appendChild(script);
-		// document.body.appendChild(script2);
-
 		
 	}
 
