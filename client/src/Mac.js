@@ -2,12 +2,11 @@ import React, { Component } from 'react';
 import warp from './res/warp.mp4';
 import pixel from './res/pixel_frog.jpg';
 import mulFrogs from './res/pixel_frogs.jpg';
+import tv from './res/tv.jpg';
 import celeb from './res/pixel_50.jpg';
 import logo from './logo.svg';
 import './App.css';
-import {Curve, Create, Num, Geom, CanvasSpace, Pt, Group} from "pts"
 import * as THREE from 'three';
-import * as Dither from 'canvas-dither';
 import clm from 'clmtrackr';
 
 const points = [
@@ -726,8 +725,8 @@ const points = [
 
 var fov = 70;
 
-var vidWidth = 950; //1280
-var vidHeight = 720; //720
+var vidWidth = 950; //1280 //950
+var vidHeight = 720; //720 //720
 
 
 var canvasWidth = vidWidth / 2;
@@ -804,6 +803,7 @@ class Mac extends Component {
 	renderCanvas() {
 		uniforms.centerX.value = this.state.centerX;
 		uniforms.centerY.value = this.state.centerY;
+		uniforms.time.value = Date.now() - startTime;
 		renderer.render(this.scene, this.camera);
 	}
 
@@ -845,7 +845,10 @@ class Mac extends Component {
 				texture1: { // Main webcam
 					type: 't',
 					value: videoInTexture,
-					time: { type: "f", value: Date.now() - startTime}
+				},
+				time: {
+					type: "f",
+					value: Date.now() - startTime
 				},
 				texture2: { // Background Image
 					type: 't',
@@ -908,6 +911,130 @@ class Mac extends Component {
 				void main() {
 					vec3 rgb = texture2D(map, getLocation(vUv.x, 1. - vUv.y, vUv * 40.)/40.).rgb;
 					vec3 lum = vec3(0.299, 0.587, 0.114);
+					gl_FragColor = vec4(rgb, 1.0);
+				}
+				`,
+		});
+
+		/////////////////////////
+		// FACECUTOUT SHADER /////
+		/////////////////////////
+		var shaderMaterialCut = new THREE.ShaderMaterial({
+				uniforms: uniforms,
+				vertexShader: `attribute vec3 center;
+				varying vec3 vCenter;
+				varying vec2 vUv;
+				void main() {
+						vCenter = center;
+						vUv = uv;
+						gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+				}`,
+				fragmentShader: `
+				uniform sampler2D map;
+				uniform float centerX;
+				uniform float centerY;
+				uniform vec2 resolution;
+				varying vec2 vUv;
+				uniform float time;
+
+				vec3 mod289(vec3 x) {
+				  return x - floor(x * (1.0 / 289.0)) * 289.0;
+				}
+
+				vec2 mod289(vec2 x) {
+				  return x - floor(x * (1.0 / 289.0)) * 289.0;
+				}
+
+				vec3 permute(vec3 x) {
+				  return mod289(((x*34.0)+1.0)*x);
+				}
+
+				float snoise(vec2 v)
+				  {
+				  const vec4 C = vec4(0.211324865405187,  // (3.0-sqrt(3.0))/6.0
+				                      0.366025403784439,  // 0.5*(sqrt(3.0)-1.0)
+				                     -0.577350269189626,  // -1.0 + 2.0 * C.x
+				                      0.024390243902439); // 1.0 / 41.0
+				// First corner
+				  vec2 i  = floor(v + dot(v, C.yy) );
+				  vec2 x0 = v -   i + dot(i, C.xx);
+
+				// Other corners
+				  vec2 i1;
+				  //i1.x = step( x0.y, x0.x ); // x0.x > x0.y ? 1.0 : 0.0
+				  //i1.y = 1.0 - i1.x;
+				  i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+				  // x0 = x0 - 0.0 + 0.0 * C.xx ;
+				  // x1 = x0 - i1 + 1.0 * C.xx ;
+				  // x2 = x0 - 1.0 + 2.0 * C.xx ;
+				  vec4 x12 = x0.xyxy + C.xxzz;
+				  x12.xy -= i1;
+
+				// Permutations
+				  i = mod289(i); // Avoid truncation effects in permutation
+				  vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 ))
+						+ i.x + vec3(0.0, i1.x, 1.0 ));
+
+				  vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+				  m = m*m ;
+				  m = m*m ;
+
+				// Gradients: 41 points uniformly over a line, mapped onto a diamond.
+				// The ring size 17*17 = 289 is close to a multiple of 41 (41*7 = 287)
+
+				  vec3 x = 2.0 * fract(p * C.www) - 1.0;
+				  vec3 h = abs(x) - 0.5;
+				  vec3 ox = floor(x + 0.5);
+				  vec3 a0 = x - ox;
+
+				// Normalise gradients implicitly by scaling m
+				// Approximation of: m *= inversesqrt( a0*a0 + h*h );
+				  m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
+
+				// Compute final noise value at P
+				  vec3 g;
+				  g.x  = a0.x  * x0.x  + h.x  * x0.y;
+				  g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+				  return 130.0 * dot(m, g);
+				}
+
+				float rand(vec2 co)
+				{
+				   return fract(sin(dot(co.xy,vec2(12.9898,78.233))) * 43758.5453);
+				}
+
+
+				float subDiv = 15.;
+				
+				float rand(float n){return fract(sin(n) * 43758.5453123);}
+
+				void main() {
+					float timeLapse = time * 2.0;
+
+					// Create large, incidental noise waves
+					float noise = max(0.0, snoise(vec2(timeLapse, vUv.y * 0.3)) - 0.3) * (1.0 / 0.7);
+
+					// Offset by smaller, constant noise waves
+    				noise = noise + (snoise(vec2(timeLapse*10.0, vUv.y * 2.4)) - 0.5) * 0.15;
+
+    				// Apply the noise as x displacement for every line
+    				float xpos = vUv.x - noise * noise * 0.25;
+
+					float offset = fract(vUv.x * subDiv)/subDiv;
+					// vec3 rgb = texture2D(map, vec2(rand(floor(vUv.x * subDiv)/subDiv) + offset, vUv.y)).rgb;
+					vec3 rgb = texture2D(map, vec2(rand(floor(vUv.x * subDiv)/subDiv) - noise * noise * 0.25 + offset, vUv.y)).rgb;
+
+					// Mix in some random interference for lines
+    				rgb = mix(rgb, vec3(rand(vec2(vUv.y * timeLapse))), noise * 0.3).rgb;
+
+    				if (floor(mod(vUv.y * resolution.y * 0.25, 2.0)) == 0.0)
+				    {	// Apply a line pattern every 4 pixels
+				        rgb *= 1.0 - (0.15 * noise);
+				    }
+
+					rgb.y = mix(rgb.x, texture2D(map, vec2(rand(floor(vUv.x * subDiv)/subDiv) + offset + noise * 0.05, vUv.y)).g, 0.25);
+					rgb.z = mix(rgb.x, texture2D(map, vec2(rand(floor(vUv.x * subDiv)/subDiv) + offset - noise * 0.05, vUv.y)).b, 0.25);
+
 					gl_FragColor = vec4(rgb, 1.0);
 				}
 				`,
@@ -1287,7 +1414,8 @@ class Mac extends Component {
 		//////////// CHANGE SHADER EFFECT HERE /////////////
 		////////////////////////////////////////////////////
 
-		var wiremirror = new THREE.Mesh(geometry, shaderMaterial);
+		var wiremirror = new THREE.Mesh(geometry, shaderMaterialCut);
+		// var wiremirror = new THREE.Mesh(geometry, shaderMaterial);
 		var wiremirrorGray = new THREE.Mesh(geometry, shaderMaterialGrayscale);
 		var wiremirrorTwoTone = new THREE.Mesh(geometry, shaderMaterialTwoTone);
 		// wiremirror = new THREE.Mesh(geometry, shaderMaterialGrid);
@@ -1303,9 +1431,13 @@ class Mac extends Component {
 			antialias: true,
 		});
 		renderer.sortObjects = false;
-		renderer.setSize(vidWidth, vidHeight); //CHANGE ASPECT RATIO
+		renderer.setSize(vidWidth * 1.67, vidHeight * 1.67); //CHANGE ASPECT RATIO
 		this.canvas = renderer.domElement;
 		this.container.appendChild(renderer.domElement);
+		console.log(this.canvas)
+		this.ctx = this.canvas.getContext("webgl");
+		// console.log(this.ctx)
+		// this.ctx.scale(2,2);
 
 		//vidCanvas to draw screenshot from video
 		vidCanvas = document.createElement('canvas');
@@ -1373,10 +1505,10 @@ class Mac extends Component {
 		const script = document.createElement("script");
 		const script2 = document.createElement("script");
 
-		script.src = "https://blotter-js.herokuapp.com/blotter.min.js";
-		script.async = true;
-		script2.src = "https://blotter-js.herokuapp.com/liquidDistortMaterial.js";
-		script2.async = true;
+		// script.src = "https://blotter-js.herokuapp.com/blotter.min.js";
+		// script.async = true;
+		// script2.src = "https://blotter-js.herokuapp.com/liquidDistortMaterial.js";
+		// script2.async = true;
 
 		// script.onload = () => {
 		// 	console.log('SCRIPT LOADED')
@@ -1415,6 +1547,7 @@ class Mac extends Component {
 				<div id="testContainer" />
 				<video id="videoel" width={vidWidth} height={vidHeight} preload="auto" loop playsinline autoplay style={{position: 'absolute', zIndex: '-5', top: 0, left: 0}}>
 				</video>
+				<img src={tv} style={{position: 'absolute', zIndex: -5, top: 0, left: 0}}/>
 				<button onClick={() => {
 						vidCanvasCtx.drawImage(this.video, 0, 0, vidCanvas.width, vidCanvas.height);
 						var dataURI = vidCanvas.toDataURL('image/jpeg');
