@@ -756,13 +756,13 @@ class Mac extends Component {
 		for (let i = 0; i < 10; i++){
 			emptyState[i] = {xTranslate: 0, yTranslate: 0, clipPoints: [], bufferEyeL: [], bufferEyeR: [], centerX: 0, centerY: 0, faceWidth: 0};
 		}
-		this.lockState = false;
+		// this.lockState = false;
 		this.stateSnapshot = emptyState;
 		this.state = emptyState;
 		this.emptyState = emptyState;
-		this.nState = emptyState;
+		this.nState = Object.assign({}, emptyState);
 		this.onCamReady = this.onCamReady.bind(this);
-		this.refreshState = this.refreshState.bind(this);
+		this.sState = Object.assign({}, emptyState);
 		this.onCamMetaDataLoaded = this.onCamMetaDataLoaded.bind(this);
 		this.animate = this.animate.bind(this);
 		this.onOpen = this.onOpen.bind(this);
@@ -771,16 +771,6 @@ class Mac extends Component {
 	}
 
 	onOpen(evt){ }
-
-	refreshState(){
-		for (let i = 0; i < Object.keys(this.nState).length; i++){
-			if (this.nState[i] == this.stateSnapshot[i]) {
-				this.nState[i] = Object.assign({}, this.emptyState);
-			}
-		}
-		this.stateSnapshot = this.nState;
-		this.lockState = false;
-	}
 
 	onMessage(evt){
 		let msg = evt.data;
@@ -811,7 +801,11 @@ class Mac extends Component {
 			clipPoints.push(`${bufferObj[`x_${i}`]}px ${bufferObj[`y_${i}`]}px`);
 		}
 
-		if (!this.lockState) {
+		if (faceID == 0) {
+			this.sState = this.nState;
+			this.nState = Object.assign({}, this.emptyState, {[faceID]: {...newState, clipPoints, ...{ centerX: bufferObj['x_33'], centerY: bufferObj['y_27'], faceWidth}}});
+		}
+		else {
 			this.nState = Object.assign({}, this.nState, {[faceID]: {...newState, clipPoints, ...{ centerX: bufferObj['x_33'], centerY: bufferObj['y_27'], faceWidth}}});
 		}
 	}
@@ -824,14 +818,7 @@ class Mac extends Component {
 	}
 
 	animate() {
-		counter++;
-		if (!this.lockState) {
-			this.renderCanvas();
-		}
-		if (counter % 25 == 0) {
-			this.lockState = true;
-			this.refreshState();
-		}
+		this.renderCanvas();
 		requestAnimationFrame(this.animate);
 	}
 
@@ -844,7 +831,7 @@ class Mac extends Component {
 	}
 
 	renderCanvas() {
-		uniforms.facePoints.value = this.objToArray(this.nState);
+		uniforms.facePoints.value = this.objToArray(this.sState);
 		renderer.render(this.scene, this.camera);
 	}
 
