@@ -115,6 +115,10 @@ h3 {
   font-family: 'BentonSansF'
 }
 
+html {
+  overflow: hidden;
+}
+
 .App {
   text-align: center;
 }

@@ -732,8 +732,10 @@ var vidHeight = 970; //720 //mimo 800 //fb 720
 
 var canvasWidth = vidWidth / 2;
 var canvasHeight = vidHeight / 2;
-var startTime = Date.now();
 
+var openFaceWidth = 640;
+var openFaceHeight = 360;
+var startTime = Date.now();
 var renderer;
 var mainGroup;
 var geometry;
@@ -744,12 +746,23 @@ var title, prompt;
 var canvasText;
 var uniforms; 
 var backgroundImage;
+var counter = 0;
 
 class Mac extends Component {
 	constructor(props){
 		super(props);
-		this.state = {xTranslate: 0, yTranslate: 0, clipPoints: [], bufferEyeL: [], bufferEyeR: []}
+		// this.state = {xTranslate: 0, yTranslate: 0, clipPoints: [], bufferEyeL: [], bufferEyeR: []}
+		let emptyState = {};
+		for (let i = 0; i < 10; i++){
+			emptyState[i] = {xTranslate: 0, yTranslate: 0, clipPoints: [], bufferEyeL: [], bufferEyeR: [], centerX: 0, centerY: 0, faceWidth: 0};
+		}
+		this.lockState = false;
+		this.stateSnapshot = emptyState;
+		this.state = emptyState;
+		this.emptyState = emptyState;
+		this.nState = emptyState;
 		this.onCamReady = this.onCamReady.bind(this);
+		this.refreshState = this.refreshState.bind(this);
 		this.onCamMetaDataLoaded = this.onCamMetaDataLoaded.bind(this);
 		this.animate = this.animate.bind(this);
 		this.onOpen = this.onOpen.bind(this);
@@ -758,6 +771,16 @@ class Mac extends Component {
 	}
 
 	onOpen(evt){ }
+
+	refreshState(){
+		for (let i = 0; i < Object.keys(this.nState).length; i++){
+			if (this.nState[i] == this.stateSnapshot[i]) {
+				this.nState[i] = Object.assign({}, this.emptyState);
+			}
+		}
+		this.stateSnapshot = this.nState;
+		this.lockState = false;
+	}
 
 	onMessage(evt){
 		let msg = evt.data;
@@ -768,6 +791,8 @@ class Mac extends Component {
 			return {[pt]: bufferArr[index]}
 		}));
 
+		let faceID = bufferObj['face'];
+		let faceWidth = bufferObj['x_16'] - bufferObj['x_0'];
 		let bufferGazeX = bufferObj['gaze_angle_x'];
 		let bufferGazeY = bufferObj['gaze_angle_y'];
 		let bufferEyeL = [bufferObj['eye_lmk_x_0'], bufferObj['eye_lmk_y_0']];
@@ -786,7 +811,9 @@ class Mac extends Component {
 			clipPoints.push(`${bufferObj[`x_${i}`]}px ${bufferObj[`y_${i}`]}px`);
 		}
 
-		// this.setState({...newState, clipPoints, ...{ centerX: bufferObj['x_33'], centerY: bufferObj['y_33']}});
+		if (!this.lockState) {
+			this.nState = Object.assign({}, this.nState, {[faceID]: {...newState, clipPoints, ...{ centerX: bufferObj['x_33'], centerY: bufferObj['y_27'], faceWidth}}});
+		}
 	}
 
 
@@ -797,13 +824,27 @@ class Mac extends Component {
 	}
 
 	animate() {
+		counter++;
+		if (!this.lockState) {
+			this.renderCanvas();
+		}
+		if (counter % 25 == 0) {
+			this.lockState = true;
+			this.refreshState();
+		}
 		requestAnimationFrame(this.animate);
-		this.renderCanvas();
+	}
+
+	objToArray(obj){
+		let arr = [];
+		Object.keys(obj).map((item, index) => {
+			arr[index] = new THREE.Vector3(obj[item].centerX/openFaceWidth, obj[item].centerY/openFaceHeight, obj[item].faceWidth/openFaceWidth);
+		})
+		return arr;
 	}
 
 	renderCanvas() {
-		uniforms.centerX.value = this.state.centerX;
-		uniforms.centerY.value = this.state.centerY;
+		uniforms.facePoints.value = this.objToArray(this.nState);
 		renderer.render(this.scene, this.camera);
 	}
 
@@ -819,7 +860,7 @@ class Mac extends Component {
 		this.camera = new THREE.PerspectiveCamera(fov, vidWidth / vidHeight, 1, 5000); //CHANGE ASPECT RATIO
 		this.camera.target = new THREE.Vector3(0, 0, 0);
 		this.scene.add(this.camera);
-		this.camera.position.z = 200;
+		this.camera.position.z = 300;
 
 		// Toggle UI
 		var videoInTexture = new THREE.VideoTexture(this.video);
@@ -834,9 +875,9 @@ class Mac extends Component {
 			requestAnimationFrame(positionLoop);
 			var positions = ctracker.getCurrentPosition();
 			// positions = [[x_0, y_0], [x_1,y_1], ... ]
-			if (positions) {
-				that.setState({ centerX: positions[62][0], centerY: positions[62][1]});
-			}
+			// if (positions) {
+			// 	that.setState({ centerX: positions[62][0], centerY: positions[62][1]});
+			// }
 		  }
 		positionLoop();
 
@@ -855,6 +896,16 @@ class Mac extends Component {
 					// value: videoInTextureMask
 					value: new THREE.TextureLoader().load( mulFrogs )
 				},
+				// "uVec4Array" : { type: "v4v", value: [ new THREE.Vector4( 0.1, 0.2, 0.3, 0.4 ), 
+    //                                new THREE.Vector4( 0.4, 0.5, 0.6, 0.7 ) ] }, // Vector4 array
+				facePoints : { // Vector4 array
+					// type: "v2v",
+					value: this.objToArray(this.nState)
+                },
+                numFaces: {
+                	type: 'i',
+                	value: 1
+                },
 				centerX: {
 					type: "f",
 					value: this.state.centerX
@@ -931,7 +982,8 @@ class Mac extends Component {
 		);
 		//switch shader
 		let shaderIndex = 0;
-		let shaders = [wiremirrorGray,
+		let shaders = [
+					   wiremirrorGray,
 					   wiremirrorTwoTone,
 					   wiremirror,
 					   wiremirrorGrayF,
