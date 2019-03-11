@@ -18,6 +18,7 @@ function shaderMaterial(uniforms, blur = true){
 		uniform sampler2D map;
 		uniform float centerX;
 		uniform float centerY;
+		uniform int numFaces;
 		uniform vec3 facePoints[2];
 		uniform vec2 resolution;
 		varying vec2 vUv;
@@ -61,13 +62,12 @@ function shaderMaterial(uniforms, blur = true){
 			vec3 rgb;
 			vec2 vUV2 = vUv;
 			float test = 0.;
-			for( int i = 0; i < 10; i++ )
+			for( int i = 0; i < 4; i++ )
 			{
 				if (vUv.x == 0.) continue;
 				vUV2 = getLocation(vUV2.x, 1. - vUV2.y, vUV2 * 40., facePoints[i].x, facePoints[i].y, facePoints[i].z)/40.; //With face blur
-				// test += testLocation(vUv.x, 1. - vUv.y, vUv * 40., facePoints[i].x, facePoints[i].y, facePoints[i].z)/40.;
+				// test += testLocation(vUv.x, 1. - vUv.y, vUv * 40., facePoints[i].x, facePoints[i].y, facePoints[i].z)/40.; //With face blur
 			}
-
 			if (${blur}) rgb = texture2D(map, vUV2).rgb; //With face blur
 			// if (${blur} && test > 0.) rgb = vec3(1., 0., 0.); //With face blur
 			// if (${blur} && test == 0.) rgb = texture2D(map, vUV2).rgb; //With face blur

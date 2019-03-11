@@ -63,8 +63,8 @@ function shaderMaterialGrayscale(uniforms, blur = true) {
 		vec2 getLocation(float x, float y, vec2 vUv, float xCenter, float yCenter, float faceWidth) {
 			vec2 location;
 			float distance = sqrt(pow(xCenter - x, 2.) + pow(yCenter - y, 2.));
-			if (distance < faceWidth * 1.5) {
-				float scaled = smoothstep(faceWidth * 1.5, 0., distance);
+			if (distance < faceWidth * 1.4) {
+				float scaled = smoothstep(faceWidth * 1.4, 0., distance);
 				vec2 diff = vUv - floor(vUv); // [0, 1)
 				location = vUv - (diff * scaled);
 			}
