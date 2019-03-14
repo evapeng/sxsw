@@ -7,7 +7,6 @@ import logo from './logo.svg';
 import './App.css';
 import {Curve, Create, Num, Geom, CanvasSpace, Pt, Group} from "pts"
 import * as Dither from 'canvas-dither';
-import clm from 'clmtrackr';
 import getShader from './shaders/Shader.js';
 import * as THREE from 'three';
 
@@ -732,8 +731,10 @@ var vidHeight = 970; //720 //mimo 800 //fb 720
 
 var canvasWidth = vidWidth / 2;
 var canvasHeight = vidHeight / 2;
-var startTime = Date.now();
 
+var openFaceWidth = 640;
+var openFaceHeight = 360;
+var startTime = Date.now();
 var renderer;
 var mainGroup;
 var geometry;
@@ -744,11 +745,19 @@ var title, prompt;
 var canvasText;
 var uniforms; 
 var backgroundImage;
+var counter = 0;
 
 class Mac extends Component {
 	constructor(props){
 		super(props);
-		this.state = {xTranslate: 0, yTranslate: 0, clipPoints: [], bufferEyeL: [], bufferEyeR: []}
+		// this.state = {xTranslate: 0, yTranslate: 0, bufferEyeL: [], bufferEyeR: []}
+		let emptyState = {};
+		for (let i = 0; i < 10; i++){
+			emptyState[i] = {xTranslate: 0, yTranslate: 0, bufferEyeL: [], bufferEyeR: [], faceWidth: 0};
+		}
+		this.emptyState = emptyState;
+		this.nState = Object.assign({}, emptyState);
+		this.sState = Object.assign({}, emptyState);
 		this.onCamReady = this.onCamReady.bind(this);
 		this.onCamMetaDataLoaded = this.onCamMetaDataLoaded.bind(this);
 		this.animate = this.animate.bind(this);
@@ -768,25 +777,16 @@ class Mac extends Component {
 			return {[pt]: bufferArr[index]}
 		}));
 
-		let bufferGazeX = bufferObj['gaze_angle_x'];
-		let bufferGazeY = bufferObj['gaze_angle_y'];
-		let bufferEyeL = [bufferObj['eye_lmk_x_0'], bufferObj['eye_lmk_y_0']];
-		let bufferEyeR = [bufferObj['eye_lmk_x_1'], bufferObj['eye_lmk_y_1']];
+		let faceID = bufferObj['face'];
+		let faceWidth = bufferObj['x_16'] - bufferObj['x_0'];
 
-		let newState = {xTranslate: bufferGazeX * 100, yTranslate: bufferGazeY * 100, bufferEyeL, bufferEyeR};
-		let clipPoints = [];
-
-		// Buttom of face
-		for (let i = 0; i < 17; i++){
-			clipPoints.push(`${bufferObj[`x_${i}`]}px ${bufferObj[`y_${i}`]}px`);
+		if (faceID == 0) {
+			this.sState = this.nState;
+			this.nState = Object.assign({}, this.emptyState, {[faceID]: {...{ centerX: bufferObj['x_33'], centerY: bufferObj['y_27'], faceWidth}}});
 		}
-
-		// Eyebrows
-		for (let i =26; i > 16; i--){
-			clipPoints.push(`${bufferObj[`x_${i}`]}px ${bufferObj[`y_${i}`]}px`);
+		else {
+			this.nState = Object.assign({}, this.nState, {[faceID]: {...{ centerX: bufferObj['x_33'], centerY: bufferObj['y_27'], faceWidth}}});
 		}
-
-		// this.setState({...newState, clipPoints, ...{ centerX: bufferObj['x_33'], centerY: bufferObj['y_33']}});
 	}
 
 
@@ -797,13 +797,20 @@ class Mac extends Component {
 	}
 
 	animate() {
-		requestAnimationFrame(this.animate);
 		this.renderCanvas();
+		requestAnimationFrame(this.animate);
+	}
+
+	objToArray(obj){
+		let arr = [];
+		Object.keys(obj).map((item, index) => {
+			arr[index] = new THREE.Vector3(obj[item].centerX/openFaceWidth, obj[item].centerY/openFaceHeight, obj[item].faceWidth/openFaceWidth);
+		})
+		return arr;
 	}
 
 	renderCanvas() {
-		uniforms.centerX.value = this.state.centerX;
-		uniforms.centerY.value = this.state.centerY;
+		uniforms.facePoints.value = this.objToArray(this.sState);
 		renderer.render(this.scene, this.camera);
 	}
 
@@ -819,26 +826,11 @@ class Mac extends Component {
 		this.camera = new THREE.PerspectiveCamera(fov, vidWidth / vidHeight, 1, 5000); //CHANGE ASPECT RATIO
 		this.camera.target = new THREE.Vector3(0, 0, 0);
 		this.scene.add(this.camera);
-		this.camera.position.z = 200;
+		this.camera.position.z = 190;
 
 		// Toggle UI
 		var videoInTexture = new THREE.VideoTexture(this.video);
 		var videoInTextureMask = new THREE.VideoTexture(this.videoFrog);
-		var ctracker = new clm.tracker();
-
-		ctracker.init();
-		ctracker.start(this.video);
-
-		var that = this;
-		function positionLoop() {
-			requestAnimationFrame(positionLoop);
-			var positions = ctracker.getCurrentPosition();
-			// positions = [[x_0, y_0], [x_1,y_1], ... ]
-			if (positions) {
-				that.setState({ centerX: positions[62][0], centerY: positions[62][1]});
-			}
-		  }
-		positionLoop();
 
 		uniforms = {
 				texture1: { // Main webcam
@@ -855,14 +847,16 @@ class Mac extends Component {
 					// value: videoInTextureMask
 					value: new THREE.TextureLoader().load( mulFrogs )
 				},
-				centerX: {
-					type: "f",
-					value: this.state.centerX
-				},
-				centerY: {
-					type: "f",
-					value: this.state.centerY
-				},
+				// "uVec4Array" : { type: "v4v", value: [ new THREE.Vector4( 0.1, 0.2, 0.3, 0.4 ), 
+    //                                new THREE.Vector4( 0.4, 0.5, 0.6, 0.7 ) ] }, // Vector4 array
+				facePoints : { // Vector4 array
+					// type: "v2v",
+					value: this.objToArray(this.nState)
+                },
+                numFaces: {
+                	type: 'i',
+                	value: 1
+                },
 				resolution: { type: "v2", value: new THREE.Vector2() }
 		};
 
@@ -907,18 +901,8 @@ class Mac extends Component {
 			antialias: true,
 		});
 		renderer.sortObjects = false;
-		renderer.setSize(vidWidth, vidHeight); //CHANGE ASPECT RATIO
-		this.canvas = renderer.domElement;
+		renderer.setSize(vidWidth, vidHeight);
 		this.container.appendChild(renderer.domElement);
-
-		//vidCanvas to draw screenshot from video
-		vidCanvas = document.createElement('canvas');
-		vidCanvas.width = vidWidth;
-		vidCanvas.height = vidHeight;
-		vidCanvasCtx = vidCanvas.getContext('2d');
-		// document.body.appendChild(vidCanvas);
-		// vidCanvas.style.position = 'absolute';
-		// vidCanvas.style.display = 'none';
 		
 		//handle WebGL context lost
 		renderer.domElement.addEventListener(
@@ -931,7 +915,8 @@ class Mac extends Component {
 		);
 		//switch shader
 		let shaderIndex = 0;
-		let shaders = [wiremirrorGray,
+		let shaders = [
+					   wiremirrorGray,
 					   wiremirrorTwoTone,
 					   wiremirror,
 					   wiremirrorGrayF,
